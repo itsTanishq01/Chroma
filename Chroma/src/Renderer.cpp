@@ -9,7 +9,7 @@ namespace Utils {
 	static uint32_t ConvertToRGBA(const glm::vec4& color)
 	{
 		uint8_t r = (uint8_t)(color.r * 255.0f);
-		uint8_t g = (uint8_t)(color.g * 255.0f);
+		uint8_t g = (uint8_t)(color.g * 255.0f);    
 		uint8_t b = (uint8_t)(color.b * 255.0f);
 		uint8_t a = (uint8_t)(color.a * 255.0f);
 
@@ -27,14 +27,19 @@ namespace Utils {
 	{
 		seed = PCG_Hash(seed);
 		return (float)seed / (float)std::numeric_limits<uint32_t>::max();
+
+        //return Walnut::Random::Float();
 	}
 
 	static glm::vec3 InUnitSphere(uint32_t& seed)
 	{
 		return glm::normalize(glm::vec3(
-			RandomFloat(seed) * 2.0f - 1.0f, 
-			RandomFloat(seed) * 2.0f - 1.0f,
-			RandomFloat(seed) * 2.0f - 1.0f));
+		    RandomFloat(seed) * 2.0f - 1.0f, 
+		    RandomFloat(seed) * 2.0f - 1.0f,
+	        RandomFloat(seed) * 2.0f - 1.0f));
+
+        //return Walnut::Random::InUnitSphere();
+
 	}
 }
 
@@ -122,130 +127,169 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 
 glm::vec4 Renderer::PerPixel(uint32_t x, uint32_t y)
 {
-	Ray ray;
-	ray.Origin = m_ActiveCamera->GetPosition();
-	ray.Direction = m_ActiveCamera->GetRayDirections()[x + y * m_FinalImage->GetWidth()];
+    // Final accumulated color for this pixel
+    glm::vec3 finalColor(0.0f);
 
-	glm::vec3 light(0.0f);
-	glm::vec3 contribution(1.0f);
+    // Base seed for this pixel
+    uint32_t baseSeed = x + y * m_FinalImage->GetWidth();
+    baseSeed *= m_FrameIndex;
 
-	uint32_t seed = x + y * m_FinalImage->GetWidth();
-	seed *= m_FrameIndex;
+    // Sample multiple rays per pixel
+    for (int sample = 0; sample < m_Settings.SamplesPerPixel; sample++)
+    {
+        // Create a different seed for each sample
+        uint32_t seed = baseSeed + sample * 719393; // Use a prime number for better distribution
 
-	int bounces = 5;
-	for (int i = 0; i < bounces; i++)
-	{
-		seed += i;
+        // Ray for this sample
+        Ray ray;
+        ray.Origin = m_ActiveCamera->GetPosition();
 
-		Renderer::HitPayload payload = TraceRay(ray);
-		if (payload.HitDistance < 0.0f)
-		{
-			// Set background/sky color
-			glm::vec3 skyColor = glm::vec3(0.6f, 0.7f, 0.9f);
-			light += skyColor * contribution;
-			break;
-		}
+        if (m_Settings.SamplesPerPixel > 1)
+        {
+            // Calculate sub-pixel offsets for anti-aliasing
+            float offsetX = Utils::RandomFloat(seed) - 0.5f;
+            float offsetY = Utils::RandomFloat(seed) - 0.5f;
 
-		const Sphere& sphere = m_ActiveScene->Spheres[payload.ObjectIndex];
-		const Material& material = m_ActiveScene->Materials[sphere.MaterialIndex];
+            // Convert pixel coordinates to normalized device coordinates (-1 to 1)
+            float ndcX = (((float)x + offsetX) / (float)m_FinalImage->GetWidth()) * 2.0f - 1.0f;
+            float ndcY = (((float)y + offsetY) / (float)m_FinalImage->GetHeight()) * 2.0f - 1.0f;
 
-		// Add emission contribution
-		light += material.GetEmission() * contribution;
+            // Create ray direction based on jittered position
+            glm::vec4 target = m_ActiveCamera->GetInverseProjection() * glm::vec4(ndcX, ndcY, 1, 1);
+            ray.Direction = glm::normalize(glm::vec3(m_ActiveCamera->GetInverseView() *
+                glm::vec4(glm::normalize(glm::vec3(target) / target.w), 0)));
+        }
+        else
+        {
+            // Use original ray direction when not anti-aliasing
+            ray.Direction = m_ActiveCamera->GetRayDirections()[x + y * m_FinalImage->GetWidth()];
+        }
 
-		// Calculate surface data
-		glm::vec3 worldPosition = payload.WorldPosition;
-		glm::vec3 worldNormal = payload.WorldNormal;
+        // Trace the ray
+        glm::vec3 light(0.0f);
+        glm::vec3 contribution(1.0f);
 
-		// Offset ray origin slightly to prevent self-intersection
-		ray.Origin = worldPosition + worldNormal * 0.0001f;
+        int bounces = 5;
+        for (int i = 0; i < bounces; i++)
+        {
+            seed += i;
 
-		// Check for transparency
-		if (material.Transparency > 0.0f)
-		{
-			// Calculate whether we refract or reflect (based on Fresnel)
-			float cosTheta = glm::min(glm::dot(-ray.Direction, worldNormal), 1.0f);
-			float reflectance = CalculateFresnel(cosTheta, material.IndexOfRefraction);
+            Renderer::HitPayload payload = TraceRay(ray);
+            if (payload.HitDistance < 0.0f)
+            {
+                // Set background/sky color
+                glm::vec3 skyColor = glm::vec3(0.6f, 0.7f, 0.9f);
+                light += skyColor * contribution;
+                break;
+            }
 
-			// Mix reflectance with material's reflection strength
-			reflectance = reflectance + material.ReflectionStrength * (1.0f - reflectance);
+            const Sphere& sphere = m_ActiveScene->Spheres[payload.ObjectIndex];
+            const Material& material = m_ActiveScene->Materials[sphere.MaterialIndex];
 
-			// Random choice between reflection and refraction based on Fresnel
-			if (Utils::RandomFloat(seed) < reflectance)
-			{
-				// Reflection ray
-				ray.Direction = glm::reflect(ray.Direction,
-					worldNormal + material.Roughness * Utils::InUnitSphere(seed));
+            // Add emission contribution
+            light += material.GetEmission() * contribution;
 
-				// Apply reflection tint
-				contribution *= material.ReflectionTint;
-			}
-			else
-			{
-				// Refraction ray
-				float eta = 1.0f / material.IndexOfRefraction;
-				if (glm::dot(worldNormal, ray.Direction) > 0.0f)
-				{
-					// We're exiting the object
-					worldNormal = -worldNormal;
-					eta = material.IndexOfRefraction;
-				}
+            // Calculate surface data
+            glm::vec3 worldPosition = payload.WorldPosition;
+            glm::vec3 worldNormal = payload.WorldNormal;
 
-				// Use Snell's law for refraction
-				float cosI = glm::dot(-ray.Direction, worldNormal);
-				float sinT2 = eta * eta * (1.0f - cosI * cosI);
+            // Offset ray origin slightly to prevent self-intersection
+            ray.Origin = worldPosition + worldNormal * 0.0001f;
 
-				if (sinT2 < 1.0f) // Check for total internal reflection
-				{
-					float cosT = glm::sqrt(1.0f - sinT2);
-					ray.Direction = eta * ray.Direction + (eta * cosI - cosT) * worldNormal;
-					ray.Direction = glm::normalize(ray.Direction);
+            // Check for transparency
+            if (material.Transparency > 0.0f)
+            {
+                // Calculate whether we refract or reflect (based on Fresnel)
+                float cosTheta = glm::min(glm::dot(-ray.Direction, worldNormal), 1.0f);
+                float reflectance = CalculateFresnel(cosTheta, material.IndexOfRefraction);
 
-					// Apply transparency tint
-					contribution *= glm::mix(glm::vec3(1.0f), material.Albedo, material.Transparency);
-				}
-				else
-				{
-					// Total internal reflection
-					ray.Direction = glm::reflect(ray.Direction, worldNormal);
-					contribution *= material.ReflectionTint;
-				}
-			}
-		}
-		else
-		{
-			// Regular surface (diffuse + specular)
+                // Mix reflectance with material's reflection strength
+                reflectance = reflectance + material.ReflectionStrength * (1.0f - reflectance);
 
-			// Use reflection strength to determine if we reflect or diffuse
-			if (Utils::RandomFloat(seed) < material.ReflectionStrength * material.Metallic)
-			{
-				// Reflection ray (apply roughness for blurry reflections)
-				ray.Direction = glm::reflect(ray.Direction,
-					worldNormal + material.Roughness * Utils::InUnitSphere(seed));
+                // Random choice between reflection and refraction based on Fresnel
+                if (Utils::RandomFloat(seed) < reflectance)
+                {
+                    // Reflection ray
+                    ray.Direction = glm::reflect(ray.Direction,
+                        worldNormal + material.Roughness * Utils::InUnitSphere(seed));
 
-				// Apply reflection tint and metallic surface color
-				contribution *= material.Albedo * material.ReflectionTint;
-			}
-			else
-			{
-				// Diffuse ray (random direction in hemisphere)
-				if (m_Settings.SlowRandom) {
-					ray.Direction = glm::normalize(worldNormal + Walnut::Random::InUnitSphere());
-				}
-				else {
-					ray.Direction = glm::normalize(worldNormal + Utils::InUnitSphere(seed));
-				}
+                    // Apply reflection tint
+                    contribution *= material.ReflectionTint;
+                }
+                else
+                {
+                    // Refraction ray
+                    float eta = 1.0f / material.IndexOfRefraction;
+                    if (glm::dot(worldNormal, ray.Direction) > 0.0f)
+                    {
+                        // We're exiting the object
+                        worldNormal = -worldNormal;
+                        eta = material.IndexOfRefraction;
+                    }
 
-				// Apply albedo for diffuse surfaces
-				contribution *= material.Albedo;
-			}
-		}
+                    // Use Snell's law for refraction
+                    float cosI = glm::dot(-ray.Direction, worldNormal);
+                    float sinT2 = eta * eta * (1.0f - cosI * cosI);
 
-		// If contribution is very small, terminate path
-		if (glm::length(contribution) < 0.001f)
-			break;
-	}
+                    if (sinT2 < 1.0f) // Check for total internal reflection
+                    {
+                        float cosT = glm::sqrt(1.0f - sinT2);
+                        ray.Direction = eta * ray.Direction + (eta * cosI - cosT) * worldNormal;
+                        ray.Direction = glm::normalize(ray.Direction);
 
-	return glm::vec4(light, 1.0f);
+                        // Apply transparency tint
+                        contribution *= glm::mix(glm::vec3(1.0f), material.Albedo, material.Transparency);
+                    }
+                    else
+                    {
+                        // Total internal reflection
+                        ray.Direction = glm::reflect(ray.Direction, worldNormal);
+                        contribution *= material.ReflectionTint;
+                    }
+                }
+            }
+            else
+            {
+                // Regular surface (diffuse + specular)
+
+                // Use reflection strength to determine if we reflect or diffuse
+                if (Utils::RandomFloat(seed) < material.ReflectionStrength * material.Metallic)
+                {
+                    // Reflection ray (apply roughness for blurry reflections)
+                    ray.Direction = glm::reflect(ray.Direction,
+                        worldNormal + material.Roughness * Utils::InUnitSphere(seed));
+
+                    // Apply reflection tint and metallic surface color
+                    contribution *= material.Albedo * material.ReflectionTint;
+                }
+                else
+                {
+                    // Diffuse ray (random direction in hemisphere)
+                    if (m_Settings.SlowRandom) {
+                        ray.Direction = glm::normalize(worldNormal + Walnut::Random::InUnitSphere());
+                    }
+                    else {
+                        ray.Direction = glm::normalize(worldNormal + Utils::InUnitSphere(seed));
+                    }
+
+                    // Apply albedo for diffuse surfaces
+                    contribution *= material.Albedo;
+                }
+            }
+
+            // If contribution is very small, terminate path
+            if (glm::length(contribution) < 0.001f)
+                break;
+        }
+
+        // Add this sample's contribution to the final color
+        finalColor += light;
+    }
+
+    // Average all the samples
+    finalColor /= (float)m_Settings.SamplesPerPixel;
+
+    return glm::vec4(finalColor, 1.0f);
 }
 
 // Helper function for Fresnel calculation

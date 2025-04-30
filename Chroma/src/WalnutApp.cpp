@@ -17,56 +17,56 @@ public:
 	ExampleLayer()
 		: m_Camera(45.0f, 0.1f, 100.0f)
 	{
-		// Create a glass material
-		Material& glass = m_Scene.Materials.emplace_back();
-		glass.Albedo = { 0.9f, 0.9f, 1.0f };   // Slightly blue tint
-		glass.Roughness = 0.0f;                // Perfectly smooth
-		glass.Metallic = 0.0f;                 // Not metallic
-		glass.ReflectionStrength = 0.3f;       // Some inherent reflectivity
-		glass.ReflectionTint = { 1.0f, 1.0f, 1.0f };
-		glass.Transparency = 0.95f;            // Highly transparent
-		glass.IndexOfRefraction = 1.5f;        // Glass IOR
+		// Create materials
+		// Floor material (large sphere)
+		Material& floorMaterial = m_Scene.Materials.emplace_back();
+		floorMaterial.Albedo = { 0.5f, 0.5f, 0.5f };      // Medium gray
+		floorMaterial.Roughness = 0.2f;
+		floorMaterial.Metallic = 0.0f;
+		floorMaterial.ReflectionStrength = 0.1f;
 
-		// An emissive light material to illuminate the scene
-		Material& light = m_Scene.Materials.emplace_back();
-		light.Albedo = { 1.0f, 0.9f, 0.7f };   // Warm light color
-		light.EmissionColor = { 1.0f, 0.9f, 0.7f };
-		light.EmissionPower = 5.0f;            // Bright light
+		// Glass material (transparent sphere)
+		Material& glassMaterial = m_Scene.Materials.emplace_back();
+		glassMaterial.Albedo = { 0.9f, 0.9f, 1.0f };      // Very slight blue tint
+		glassMaterial.Roughness = 0.0f;                   // Perfectly smooth
+		glassMaterial.Metallic = 0.0f;
+		glassMaterial.ReflectionStrength = 0.3f;
+		glassMaterial.ReflectionTint = { 0.95f, 0.95f, 1.0f };
+		glassMaterial.Transparency = 0.95f;               // High transparency
+		glassMaterial.IndexOfRefraction = 1.52f;          // Glass IOR
 
-		// A ground material
-		Material& ground = m_Scene.Materials.emplace_back();
-		ground.Albedo = { 0.5f, 0.5f, 0.5f };  // Gray
-		ground.Roughness = 0.2f;               // Somewhat smooth
-		ground.ReflectionStrength = 0.1f;      // Slight reflections
+		// Light source material
+		Material& lightMaterial = m_Scene.Materials.emplace_back();
+		lightMaterial.EmissionColor = { 1.0f, 0.9f, 0.7f }; // Warm white
+		lightMaterial.EmissionPower = 25.0f;                // Bright light
 
-		// Glass sphere
+		// Big sphere as floor
 		{
 			Sphere sphere;
-			sphere.Position = { 0.0f, 0.0f, 0.0f };  // Center of scene
-			sphere.Radius = 1.0f;
-			sphere.MaterialIndex = 0;  // Glass material (first one we created)
+			sphere.Position = { 0.0f, -10.0f, 0.0f };     // Center below the scene
+			sphere.Radius = 10.0f;                        // Large radius to act as a floor
+			sphere.MaterialIndex = 0;                     // Floor material
+			m_Scene.Spheres.push_back(sphere);
+		}
+
+		// Small transparent sphere above
+		{
+			Sphere sphere;
+			sphere.Position = { 0.0f, 1.0f, 0.0f };       // Floating above the "floor" sphere
+			sphere.Radius = 1.0f;                         // Small sphere
+			sphere.MaterialIndex = 1;                     // Glass material
 			m_Scene.Spheres.push_back(sphere);
 		}
 
 		// Light sphere
 		{
 			Sphere sphere;
-			sphere.Position = { 3.0f, 3.0f, -3.0f };  // Upper right light source
-			sphere.Radius = 0.5f;
-			sphere.MaterialIndex = 1;  // Light material
-			m_Scene.Spheres.push_back(sphere);
-		}
-
-		// Ground sphere
-		{
-			Sphere sphere;
-			sphere.Position = { 0.0f, -101.0f, 0.0f };  // Big sphere below as ground
-			sphere.Radius = 100.0f;
-			sphere.MaterialIndex = 2;  // Ground material
+			sphere.Position = { 4.0f, 5.0f, -2.0f };      // Above and to the side
+			sphere.Radius = 0.5f;                         // Small light source
+			sphere.MaterialIndex = 2;                     // Light material
 			m_Scene.Spheres.push_back(sphere);
 		}
 	}
-
 	virtual void OnUpdate(float ts) override
 	{
 		if (m_Camera.OnUpdate(ts))
@@ -84,6 +84,8 @@ public:
 
 		ImGui::Checkbox("Accumulate", &m_Renderer.GetSettings().Accumulate);
 		ImGui::Checkbox("SlowRandom", &m_Renderer.GetSettings().SlowRandom);
+
+		ImGui::SliderInt("Anti-aliasing", &m_Renderer.GetSettings().SamplesPerPixel, 1, 16);
 
 		if (ImGui::Button("Reset"))
 			m_Renderer.ResetFrameIndex();

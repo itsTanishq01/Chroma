@@ -16,6 +16,7 @@ public:
 	{
 		bool Accumulate = true;
 		bool SlowRandom = true;
+		int SamplesPerPixel = 1;
 	};
 public:
 	Renderer() = default;
