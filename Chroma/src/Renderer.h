@@ -12,52 +12,61 @@
 class Renderer
 {
 public:
-	struct Settings
-	{
-		bool Accumulate = true;
-		bool SlowRandom = true;
-		int SamplesPerPixel = 1;
-	};
+    struct Settings
+    {
+        bool Accumulate = true;
+        bool SlowRandom = true;
+        int SamplesPerPixel = 1;
+    };
 public:
-	Renderer() = default;
+    Renderer() = default;
 
-	void OnResize(uint32_t width, uint32_t height);
-	void Render(const Scene& scene, const Camera& camera);
+    void OnResize(uint32_t width, uint32_t height);
+    void Render(const Scene& scene, const Camera& camera);
 
-	std::shared_ptr<Walnut::Image> GetFinalImage() const { return m_FinalImage; }
+    std::shared_ptr<Walnut::Image> GetFinalImage() const { return m_FinalImage; }
 
-	void ResetFrameIndex() { m_FrameIndex = 1; }
-	Settings& GetSettings() { return m_Settings; }
+    void ResetFrameIndex() { m_FrameIndex = 1; }
+    Settings& GetSettings() { return m_Settings; }
 private:
-	struct HitPayload
-	{
-		float HitDistance;
-		glm::vec3 WorldPosition;
-		glm::vec3 WorldNormal;
+    struct HitPayload
+    {
+        float HitDistance;
+        glm::vec3 WorldPosition;
+        glm::vec3 WorldNormal;
 
-		int ObjectIndex;
-	};
+        int ObjectIndex;
+        ShapeType Type = ShapeType::None;
+    };
 
-	glm::vec4 PerPixel(uint32_t x, uint32_t y); // RayGen
+    glm::vec4 PerPixel(uint32_t x, uint32_t y); // RayGen
 
-	HitPayload TraceRay(const Ray& ray);
-	HitPayload ClosestHit(const Ray& ray, float hitDistance, int objectIndex);
-	HitPayload Miss(const Ray& ray);
+    HitPayload TraceRay(const Ray& ray);
+    HitPayload ClosestHit(const Ray& ray, float hitDistance, int objectIndex, ShapeType type);
+    HitPayload Miss(const Ray& ray);
+
+    // Shape intersection methods
+    bool IntersectSphere(const Ray& ray, const Sphere& sphere, float& hitDistance) const;
+    bool IntersectPlane(const Ray& ray, const Plane& plane, float& hitDistance) const;
+    bool IntersectBox(const Ray& ray, const Box& box, float& hitDistance) const;
+    bool IntersectTriangle(const Ray& ray, const Triangle& triangle, float& hitDistance,
+        glm::vec3& normal) const;
+
 private:
-	std::shared_ptr<Walnut::Image> m_FinalImage;
-	Settings m_Settings;
+    std::shared_ptr<Walnut::Image> m_FinalImage;
+    Settings m_Settings;
 
-	std::vector<uint32_t> m_ImageHorizontalIter, m_ImageVerticalIter;
+    std::vector<uint32_t> m_ImageHorizontalIter, m_ImageVerticalIter;
 
-	const Scene* m_ActiveScene = nullptr;
-	const Camera* m_ActiveCamera = nullptr;
+    const Scene* m_ActiveScene = nullptr;
+    const Camera* m_ActiveCamera = nullptr;
 
-	uint32_t* m_ImageData = nullptr;
-	glm::vec4* m_AccumulationData = nullptr;
+    uint32_t* m_ImageData = nullptr;
+    glm::vec4* m_AccumulationData = nullptr;
 
-	uint32_t m_FrameIndex = 1;
+    uint32_t m_FrameIndex = 1;
 
-	bool ShouldReflect(const Material& material, uint32_t& seed);
-	float CalculateFresnel(float cosTheta, float ior);
+    bool ShouldReflect(const Material& material, uint32_t& seed);
+    float CalculateFresnel(float cosTheta, float ior);
 
 };
