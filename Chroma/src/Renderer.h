@@ -55,4 +55,8 @@ private:
 	glm::vec4* m_AccumulationData = nullptr;
 
 	uint32_t m_FrameIndex = 1;
+
+	bool ShouldReflect(const Material& material, uint32_t& seed);
+	float CalculateFresnel(float cosTheta, float ior);
+
 };

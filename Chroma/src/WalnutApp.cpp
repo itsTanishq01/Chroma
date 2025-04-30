@@ -17,41 +17,52 @@ public:
 	ExampleLayer()
 		: m_Camera(45.0f, 0.1f, 100.0f)
 	{
-		Material& pinkSphere = m_Scene.Materials.emplace_back();
-		pinkSphere.Albedo = { 1.0f, 0.0f, 1.0f };
-		pinkSphere.Roughness = 0.0f;
+		// Create a glass material
+		Material& glass = m_Scene.Materials.emplace_back();
+		glass.Albedo = { 0.9f, 0.9f, 1.0f };   // Slightly blue tint
+		glass.Roughness = 0.0f;                // Perfectly smooth
+		glass.Metallic = 0.0f;                 // Not metallic
+		glass.ReflectionStrength = 0.3f;       // Some inherent reflectivity
+		glass.ReflectionTint = { 1.0f, 1.0f, 1.0f };
+		glass.Transparency = 0.95f;            // Highly transparent
+		glass.IndexOfRefraction = 1.5f;        // Glass IOR
 
-		Material& blueSphere = m_Scene.Materials.emplace_back();
-		blueSphere.Albedo = { 0.2f, 0.3f, 1.0f };
-		blueSphere.Roughness = 0.1f;
+		// An emissive light material to illuminate the scene
+		Material& light = m_Scene.Materials.emplace_back();
+		light.Albedo = { 1.0f, 0.9f, 0.7f };   // Warm light color
+		light.EmissionColor = { 1.0f, 0.9f, 0.7f };
+		light.EmissionPower = 5.0f;            // Bright light
 
-		Material& orangeSphere = m_Scene.Materials.emplace_back();
-		orangeSphere.Albedo = { 0.8f, 0.5f, 0.2f };
-		orangeSphere.Roughness = 0.1f;
-		orangeSphere.EmissionColor = orangeSphere.Albedo;
-		orangeSphere.EmissionPower = 2.0f;
+		// A ground material
+		Material& ground = m_Scene.Materials.emplace_back();
+		ground.Albedo = { 0.5f, 0.5f, 0.5f };  // Gray
+		ground.Roughness = 0.2f;               // Somewhat smooth
+		ground.ReflectionStrength = 0.1f;      // Slight reflections
 
+		// Glass sphere
 		{
 			Sphere sphere;
-			sphere.Position = { 0.0f, 0.0f, 0.0f };
+			sphere.Position = { 0.0f, 0.0f, 0.0f };  // Center of scene
 			sphere.Radius = 1.0f;
-			sphere.MaterialIndex = 0;
+			sphere.MaterialIndex = 0;  // Glass material (first one we created)
 			m_Scene.Spheres.push_back(sphere);
 		}
 
+		// Light sphere
 		{
 			Sphere sphere;
-			sphere.Position = { 2.0f, 0.0f, 0.0f };
-			sphere.Radius = 1.0f;
-			sphere.MaterialIndex = 2;
+			sphere.Position = { 3.0f, 3.0f, -3.0f };  // Upper right light source
+			sphere.Radius = 0.5f;
+			sphere.MaterialIndex = 1;  // Light material
 			m_Scene.Spheres.push_back(sphere);
 		}
 
+		// Ground sphere
 		{
 			Sphere sphere;
-			sphere.Position = { 0.0f, -101.0f, 0.0f };
+			sphere.Position = { 0.0f, -101.0f, 0.0f };  // Big sphere below as ground
 			sphere.Radius = 100.0f;
-			sphere.MaterialIndex = 1;
+			sphere.MaterialIndex = 2;  // Ground material
 			m_Scene.Spheres.push_back(sphere);
 		}
 	}
@@ -102,8 +113,16 @@ public:
 			ImGui::ColorEdit3("Albedo", glm::value_ptr(material.Albedo));
 			ImGui::DragFloat("Roughness", &material.Roughness, 0.05f, 0.0f, 1.0f);
 			ImGui::DragFloat("Metallic", &material.Metallic, 0.05f, 0.0f, 1.0f);
+
+			// Add these new controls
+			ImGui::DragFloat("Reflection Strength", &material.ReflectionStrength, 0.05f, 0.0f, 1.0f);
+			ImGui::ColorEdit3("Reflection Tint", glm::value_ptr(material.ReflectionTint));
+
 			ImGui::ColorEdit3("Emission Color", glm::value_ptr(material.EmissionColor));
 			ImGui::DragFloat("Emission Power", &material.EmissionPower, 0.05f, 0.0f, FLT_MAX);
+
+			ImGui::DragFloat("Transparency", &material.Transparency, 0.05f, 0.0f, 1.0f);
+			ImGui::DragFloat("Index of Refraction", &material.IndexOfRefraction, 0.05f, 1.0f, 3.0f);
 
 			ImGui::Separator();
 
